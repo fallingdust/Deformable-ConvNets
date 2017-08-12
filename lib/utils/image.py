@@ -23,7 +23,13 @@ def get_image(roidb, config):
     for i in range(num_images):
         roi_rec = roidb[i]
         assert os.path.exists(roi_rec['image']), '%s does not exist'.format(roi_rec['image'])
-        im = cv2.imread(roi_rec['image'], cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION)
+        im = cv2.imread(roi_rec['image'])
+
+        rotate_align = roidb[i]['rotate'] if 'rotate' in roidb[i] else 0
+        if rotate_align != 0:
+            rot_mat = cv2.getRotationMatrix2D((im.shape[1] / 2, im.shape[0] / 2), rotate_align, 1)
+            im = cv2.warpAffine(im, rot_mat, (im.shape[1], im.shape[0]))
+
         if roidb[i]['flipped']:
             im = im[:, ::-1, :]
         new_rec = roi_rec.copy()

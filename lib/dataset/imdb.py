@@ -218,6 +218,8 @@ class IMDB(object):
                      'max_classes': roidb[i]['max_classes'],
                      'max_overlaps': roidb[i]['max_overlaps'],
                      'flipped': True}
+            if 'rotate' in roidb[i]:
+                entry['rotate'] = roidb[i]['rotate']
 
             # if roidb has mask
             if 'cache_seg_inst' in roi_rec:
