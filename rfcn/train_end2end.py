@@ -40,8 +40,8 @@ import numpy as np
 import mxnet as mx
 
 from symbols import *
-from core import callback, metric
-from core.loader import AnchorLoader
+from core import callback, metric, mean_ap_metric
+from core.loader import AnchorLoader, ValLoader
 from core.module import MutableModule
 from utils.create_logger import create_logger
 from utils.load_data import load_gt_roidb, merge_roidb, filter_roidb
@@ -106,7 +106,22 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch, lr, 
     data_names = [k[0] for k in train_data.provide_data_single]
     label_names = [k[0] for k in train_data.provide_label_single]
 
-    mod = MutableModule(sym, data_names=data_names, label_names=label_names,
+    # load validating data
+    val_sym = None
+    val_data = None
+    val_data_names = None
+    val_label_names = None
+    val_image_set = config.dataset.val_image_set
+    if val_image_set:
+        val_sym = sym_instance.get_symbol(config, is_train=False)
+        val_roidb = load_gt_roidb(config.dataset.dataset, val_image_set, config.dataset.root_path,
+                                  config.dataset.dataset_path)
+        val_data = ValLoader(val_roidb, config)
+        val_data_names = [k[0] for k in val_data.provide_data_single]
+        val_label_names = None
+
+    mod = MutableModule(sym, data_names, label_names,
+                        val_sym, val_data_names, val_label_names,
                         logger=logger, context=ctx, max_data_shapes=[max_data_shape for _ in range(batch_size)],
                         max_label_shapes=[max_label_shape for _ in range(batch_size)], fixed_param_prefix=fixed_param_prefix)
 
@@ -125,6 +140,7 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch, lr, 
     # rpn_eval_metric, rpn_cls_metric, rpn_bbox_metric, eval_metric, cls_metric, bbox_metric
     for child_metric in [rpn_eval_metric, rpn_cls_metric, rpn_bbox_metric, eval_metric, cls_metric, bbox_metric]:
         eval_metrics.add(child_metric)
+    val_metric = mean_ap_metric.MeanAPMetric(config.dataset.NUM_CLASSES)
     # callback
     batch_end_callback = callback.Speedometer(train_data.batch_size, frequent=args.frequent)
     means = np.tile(np.array(config.TRAIN.BBOX_MEANS), 2 if config.CLASS_AGNOSTIC else config.dataset.NUM_CLASSES)
@@ -151,10 +167,11 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch, lr, 
         train_data = PrefetchingIter(train_data)
 
     # train
-    mod.fit(train_data, eval_metric=eval_metrics, epoch_end_callback=epoch_end_callback,
+    mod.fit(train_data, val_data, eval_metric=eval_metrics, epoch_end_callback=epoch_end_callback,
             batch_end_callback=batch_end_callback, kvstore=config.default.kvstore,
             optimizer='sgd', optimizer_params=optimizer_params,
-            arg_params=arg_params, aux_params=aux_params, begin_epoch=begin_epoch, num_epoch=end_epoch)
+            arg_params=arg_params, aux_params=aux_params, begin_epoch=begin_epoch, num_epoch=end_epoch,
+            validation_metric=val_metric)
 
 
 def main():

@@ -504,3 +504,91 @@ class AnchorLoader(mx.io.DataIter):
                               self.anchor_ratios, self.allowed_border)
         return {'data': data, 'label': label}
 
+
+class ValLoader(mx.io.DataIter):
+    def __init__(self, roidb, config, batch_size=1):
+        super(ValLoader, self).__init__()
+
+        # save parameters as properties
+        self.cfg = config
+        self.roidb = roidb
+        self.batch_size = batch_size
+
+        # infer properties from roidb
+        self.size = len(self.roidb)
+        self.index = np.arange(self.size)
+
+        # decide data and label names
+        self.data_name = ['data', 'im_info']
+        self.label_name = ['gt_boxes', 'im_info']
+
+        # status variable for synchronization between get_data and get_label
+        self.cur = 0
+        self.data = None
+        self.label = []
+        self.im_info = None
+
+        # get first batch to fill in provide_data and provide_label
+        self.reset()
+        self.get_batch()
+
+    @property
+    def provide_data(self):
+        return [[(k, v.shape) for k, v in zip(self.data_name, idata)] for idata in self.data]
+
+    @property
+    def provide_label(self):
+        return [None for _ in range(len(self.data))]
+
+    @property
+    def provide_data_single(self):
+        return [(k, v.shape) for k, v in zip(self.data_name, self.data[0])]
+
+    @property
+    def provide_label_single(self):
+        return None
+
+    def reset(self):
+        self.cur = 0
+
+    def iter_next(self):
+        return self.cur < self.size
+
+    def next(self):
+        if self.iter_next():
+            self.get_batch()
+            self.cur += self.batch_size
+            return mx.io.DataBatch(data=self.data, label=self.label,
+                                   pad=self.getpad(), index=self.getindex(),
+                                   provide_data=self.provide_data, provide_label=self.provide_label)
+        else:
+            raise StopIteration
+
+    def getindex(self):
+        return self.cur / self.batch_size
+
+    def getpad(self):
+        if self.cur + self.batch_size > self.size:
+            return self.cur + self.batch_size - self.size
+        else:
+            return 0
+
+    def get_batch(self):
+        cur_from = self.cur
+        cur_to = min(cur_from + self.batch_size, self.size)
+        roidb = [self.roidb[self.index[i]] for i in range(cur_from, cur_to)]
+        data, label = get_rpn_batch(roidb, self.cfg)
+        label['im_info'] = data['im_info']
+        data = [data]
+        label = [label]
+        self.data = [[mx.nd.array(idata[name]) for name in self.data_name] for idata in data]
+        self.label = [[mx.nd.array(ilabel[name]) for name in self.label_name] for ilabel in label]
+
+    def get_batch_individual(self):
+        cur_from = self.cur
+        cur_to = min(cur_from + self.batch_size, self.size)
+        roidb = [self.roidb[self.index[i]] for i in range(cur_from, cur_to)]
+        data, label = get_rpn_batch(roidb, self.cfg)
+        label['im_info'] = data['im_info']
+        self.data = [mx.nd.array(data[name]) for name in self.data_name]
+        self.label = [mx.nd.array(label[name]) for name in self.label_name]
