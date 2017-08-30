@@ -11,6 +11,7 @@ from distutils.util import strtobool
 from bbox.bbox_transform import bbox_pred, clip_boxes
 from rpn.generate_anchor import generate_anchors
 from nms.nms import py_nms_wrapper, cpu_nms_wrapper, gpu_nms_wrapper
+from config.config import config
 
 DEBUG = False
 
@@ -36,7 +37,7 @@ class ProposalOperator(mx.operator.CustomOp):
             print self._anchors
 
     def forward(self, is_train, req, in_data, out_data, aux):
-        nms = gpu_nms_wrapper(self._threshold, in_data[0].context.device_id)
+        nms = gpu_nms_wrapper(self._threshold, in_data[0].context.device_id) if config.gpus else py_nms_wrapper(self._threshold)
 
         batch_size = in_data[0].shape[0]
         if batch_size > 1:

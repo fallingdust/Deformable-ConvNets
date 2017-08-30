@@ -2,7 +2,7 @@ import mxnet as mx
 import numpy as np
 from config.config import config as cfg
 from bbox.bbox_transform import bbox_pred, clip_boxes
-from nms.nms import gpu_nms_wrapper
+from nms.nms import gpu_nms_wrapper, py_nms_wrapper
 
 
 class MeanAPMetric(mx.metric.EvalMetric):
@@ -43,7 +43,7 @@ class MeanAPMetric(mx.metric.EvalMetric):
         pred_boxes = bbox_pred(boxes, box_deltas)
         pred_boxes = clip_boxes(pred_boxes, im_shape)
 
-        nms = gpu_nms_wrapper(cfg.TEST.NMS, 0)
+        nms = gpu_nms_wrapper(cfg.TEST.NMS, 0) if cfg.gpus else py_nms_wrapper(cfg.TEST.NMS)
 
         for j in xrange(1, self._num_classes):
             inds = np.where(scores[:, j] > self._thresh)[0]

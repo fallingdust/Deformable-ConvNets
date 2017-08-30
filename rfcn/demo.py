@@ -87,7 +87,7 @@ def main():
                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
                           arg_params=arg_params, aux_params=aux_params)
-    nms = gpu_nms_wrapper(config.TEST.NMS, 0)
+    nms = gpu_nms_wrapper(config.TEST.NMS, 0) if config.gpus else py_nms_wrapper(config.TEST.NMS)
 
     # warm up
     for j in xrange(2):
